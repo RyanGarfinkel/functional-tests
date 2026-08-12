@@ -3,7 +3,8 @@ Tests for $expr in $match stage.
 
 Covers $expr basic matching, combined with regular query operators,
 $and with multiple $expr, truthiness, error handling, implicit array
-behavior, and $match with $expr after other pipeline stages.
+behavior, $match with $expr after other pipeline stages, and $$ROOT
+inside $expr.
 """
 
 import pytest
@@ -211,12 +212,29 @@ def test_tsIncrement_in_match_expr(collection):
             {"_id": 2, "ts": Timestamp(200, 10)},
         ]
     )
+    collection.insert_many(BASIC_DOCS)
     result = execute_command(
         collection,
         {
             "aggregate": collection.name,
-            "pipeline": [{"$match": {"$expr": {"$gt": [{"$tsIncrement": "$ts"}, Int64(6)]}}}],
+                "pipeline": [{"$match": {"$expr": {"$gt": [{"$tsIncrement": "$ts"}, Int64(6)]}}}],
             "cursor": {},
         },
     )
     assertSuccess(result, [{"_id": 2, "ts": Timestamp(200, 10)}])
+def test_expr_match_with_root(collection):
+    """Test $$ROOT inside $match $expr — wiring sample only.
+
+    $$ROOT's own contract (what it resolves to, field path resolution) is
+    owned by expressions/variable/system-variables/root/.
+    """
+    collection.insert_many(BASIC_DOCS)
+    result = execute_command(
+        collection,
+        {
+            "aggregate": collection.name,
+            "pipeline": [{"$match": {"$expr": {"$eq": ["$$ROOT.a", 5]}}}],
+            "cursor": {},
+        },
+    )
+    assertSuccess(result, [{"_id": 1, "a": 5, "b": 3}])
